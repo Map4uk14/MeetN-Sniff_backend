@@ -49,7 +49,6 @@ MeetN-Sniff_backend/
 ├── .env
 ├── .env.example
 ├── .gitignore
-└── [Add your project directories here]
 ```
  
 ## Technologies Used 
