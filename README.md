@@ -1,14 +1,15 @@
 # MeetN-Sniff Backend
 
-Node.js/Express backend for MeetN-Sniff with MongoDB, JWT authentication, park discovery, favorites and reviews.
+Node.js/Express backend for MeetN-Sniff with MongoDB, JWT authentication, park discovery, favorites, reviews, admin routes and external weather services.
 
-**Pinned API documentation:** [docs/API.md](docs/API.md)
+- API documentation: [docs/API.md](docs/API.md)
+- Backend requirement status: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 ## Prerequisites
 
 - Node.js 18 or newer
 - npm
-- MongoDB local or cloud instance
+- MongoDB local, remote or reachable through an SSH tunnel
 
 ## Setup
 
@@ -19,32 +20,29 @@ cp .env.example .env
 
 Update `.env` with your MongoDB connection string and a strong `JWT_SECRET` with at least 32 characters.
 
-Optional external API keys:
+Relevant environment variables:
 
 ```env
+PORT=3000
+MONGODB_URI=mongodb://127.0.0.1:27017/meetn-sniff
+JWT_SECRET=replace-this-with-a-long-random-secret-minimum-32-chars
+JWT_EXPIRES_IN=1h
+JWT_ISSUER=meetn-sniff-api
+JWT_AUDIENCE=meetn-sniff-client
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 OPENWEATHER_API_KEY=
 DEFAULT_NEARBY_RADIUS_METERS=5000
 ```
 
-The server starts without `OPENWEATHER_API_KEY`. The live weather endpoint returns a clear `503` error until the key is configured.
+`OPENWEATHER_API_KEY` is optional at startup. The weather endpoint returns `503` until the key is configured.
 
-This backend does not use Google Geocoding. Park coordinates are stored directly as MongoDB GeoJSON Points, which avoids Google Cloud billing for backend geocoding. A Google Maps JavaScript API key belongs in the frontend, for example `VITE_GOOGLE_MAPS_API_KEY`, not in this backend.
+Parks store coordinates directly as MongoDB GeoJSON Points in `[longitude, latitude]` order.
 
 ## Run
 
-Typical local flow:
-
 ```bash
-npm install
-cp .env.example .env
 npm run test
 npm run seed
-npm start
-```
-
-Development with hot reload:
-
-```bash
 npm start
 ```
 
@@ -66,21 +64,33 @@ curl http://localhost:3000/api/health
 npm test
 ```
 
-Runs a syntax check across the backend source files.
+Runs a syntax check across backend source files.
 
 ```bash
 npm run seed
 ```
 
-Inserts demo users, Vienna parks and reviews. The script is idempotent for its demo records and uses the MongoDB connection from `.env`.
+Inserts demo users, Vienna parks and reviews. The script is idempotent for its known demo records and uses `MONGODB_URI` from `.env`.
+
+Demo logins:
+
+```text
+admin@meetn-sniff.demo / MeetNSniffDemo123!
+marlon@meetn-sniff.demo / MeetNSniffDemo123!
+gamal@meetn-sniff.demo / MeetNSniffDemo123!
+```
 
 ## Project Structure
 
 ```text
 MeetN-Sniff_backend/
-├── docs/API.md
+├── docs/
+│   ├── API.md
+│   └── REQUIREMENTS.md
 ├── index.js
-├── scripts/check-syntax.js
+├── scripts/
+│   ├── check-syntax.js
+│   └── seed.js
 ├── src/
 │   ├── app.js
 │   ├── config/
@@ -94,26 +104,31 @@ MeetN-Sniff_backend/
 └── package-lock.json
 ```
 
-## Frontend/Backend Origin
+## Backend Features
 
-The API is mounted under `/api`, so frontend and backend can share one origin in production through a reverse proxy or deployment platform. For local development, set `CORS_ORIGINS` in `.env` to the frontend dev server origin, for example `http://localhost:5173`.
-
-For a Vite frontend, proxy `/api` to the Express server during development. Production can serve the frontend and proxy `/api` through the same domain.
-
-## External APIs
-
-- `GET /api/parks/:id/weather` uses OpenWeather.
-- `POST /api/parks` requires direct MongoDB GeoJSON coordinates in the request body.
-- `GET /api/parks/nearby` uses MongoDB GeoJSON search.
-- `GET /api/parks`, `GET /api/parks/nearby` and `GET /api/parks/:idOrSlug` support XML with `format=xml` or `Accept: application/xml`.
+- REST API mounted under `/api`
+- JSON responses by default
+- Optional XML for selected park GET endpoints through `?format=xml` or `Accept: application/xml`
+- JWT register/login/logout/session checks
+- Protected user, park, review and admin routes
+- MongoDB GeoJSON nearby search
+- OpenWeather current weather via `GET /api/parks/:id/weather`
+- Open-Meteo forecast via `GET /api/parks/:id/forecast`
+- Demo seed data for Vienna parks
 
 ## Security Defaults
 
-- Security headers are enabled with Helmet.
-- `/api` routes are rate-limited.
-- Auth routes have stricter login/register limits.
-- JWTs use HS256 with issuer/audience checks and a token version for logout/revocation.
-- Production requires explicit non-localhost `CORS_ORIGINS`.
+- Helmet security headers
+- CORS allow-list through `CORS_ORIGINS`
+- API and auth rate limits
+- JWT issuer/audience checks
+- JWT token version invalidation on logout
+- Password hashes are never returned in JSON/XML responses
+
+## Notes
+
+- No API keys are committed.
+- If the database is reached through SSH tunneling, `MONGODB_URI` usually points to `127.0.0.1:<local-tunnel-port>`.
 
 ## License
 

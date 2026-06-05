@@ -10,18 +10,13 @@ Development default:
 http://localhost:3000/api
 ```
 
-All routes are mounted below `/api` so the frontend and backend can be served from the same origin in production, for example:
+All backend routes are mounted below `/api`, for example:
 
 ```text
 https://meetn-sniff.example.com/api/parks
 ```
 
-During local development, run the frontend on its own dev port and either:
-
-- proxy `/api` to `http://localhost:3000` from the frontend dev server, or
-- set `CORS_ORIGINS` to the frontend origin, for example `http://localhost:5173`.
-
-Two separate processes cannot bind the exact same host and port at the same time. The same-origin setup is achieved by mounting backend routes under `/api` behind one frontend/proxy origin.
+During local development, browser origins are controlled with `CORS_ORIGINS`. Requests without an `Origin` header, such as cURL or server-to-server calls, are allowed.
 
 ## Environment
 
@@ -54,6 +49,7 @@ Security notes:
 - Rate limits default to `300` API requests per 15 minutes, `30` auth requests per 15 minutes, `5` login attempts per 15 minutes and `10` registrations per hour.
 - `OPENWEATHER_API_KEY` is optional at server startup. The weather endpoint returns `503` when the key is missing.
 - `DEFAULT_NEARBY_RADIUS_METERS` defaults to `5000` for nearby park searches.
+- Open-Meteo Forecast is used as a second external REST API and does not require an API key.
 
 ## Authentication
 
@@ -120,9 +116,9 @@ XML responses use `Content-Type: application/xml`.
 ```json
 {
   "id": "ObjectId",
-  "username": "mika",
-  "email": "mika@example.com",
-  "displayName": "Mika",
+  "username": "marlon",
+  "email": "marlon@example.com",
+  "displayName": "Marlon",
   "avatarUrl": "https://example.com/avatar.jpg",
   "bio": "Weekend park explorer.",
   "dog": {
@@ -241,10 +237,10 @@ Request:
 
 ```json
 {
-  "username": "mika",
-  "email": "mika@example.com",
+  "username": "marlon",
+  "email": "marlon@example.com",
   "password": "supersecret",
-  "displayName": "Mika",
+  "displayName": "Marlon",
   "dog": {
     "name": "Nala",
     "breed": "Labrador",
@@ -262,8 +258,8 @@ Response `201`:
   "token": "<jwt>",
   "user": {
     "id": "ObjectId",
-    "username": "mika",
-    "email": "mika@example.com"
+    "username": "marlon",
+    "email": "marlon@example.com"
   }
 }
 ```
@@ -274,7 +270,7 @@ Request:
 
 ```json
 {
-  "email": "mika@example.com",
+  "email": "marlon@example.com",
   "password": "supersecret"
 }
 ```
@@ -286,8 +282,8 @@ Response `200`:
   "token": "<jwt>",
   "user": {
     "id": "ObjectId",
-    "username": "mika",
-    "email": "mika@example.com"
+    "username": "marlon",
+    "email": "marlon@example.com"
   }
 }
 ```
@@ -323,7 +319,7 @@ Request:
 
 ```json
 {
-  "displayName": "Mika and Nala",
+  "displayName": "Marlon and Nala",
   "bio": "Always looking for good dog parks.",
   "dog": {
     "name": "Nala",
@@ -368,7 +364,7 @@ Returns a public user profile.
 
 #### Park Coordinates
 
-This backend does not use Google Geocoding. Parks must be created with stored MongoDB GeoJSON coordinates.
+Parks must be created with stored MongoDB GeoJSON coordinates.
 
 ```json
 {
@@ -481,7 +477,7 @@ Common errors:
 
 Requires auth. Creates a park.
 
-No external geocoding API is called. `location` is required and must be a MongoDB GeoJSON `Point` with coordinates in `[longitude, latitude]` order.
+`location` is required and must be a MongoDB GeoJSON `Point` with coordinates in `[longitude, latitude]` order.
 
 Request:
 
@@ -564,6 +560,45 @@ Common errors:
 - `404 PARK_NOT_FOUND`
 - `503 OPENWEATHER_NOT_CONFIGURED`
 
+#### GET `/parks/:id/forecast`
+
+Returns a short forecast for a park's stored coordinates via Open-Meteo. Auth is not required. Admin is not required. No API key is required.
+
+Response `200`:
+
+```json
+{
+  "park": {
+    "id": "ObjectId",
+    "name": "Hundezone Prater"
+  },
+  "forecast": {
+    "current": {
+      "temperature": 23.1,
+      "precipitation": 0,
+      "windSpeed": 7.2,
+      "time": "2026-06-06T12:00"
+    },
+    "daily": [
+      {
+        "date": "2026-06-06",
+        "weatherCode": 3,
+        "temperatureMax": 25.4,
+        "temperatureMin": 16.8,
+        "precipitationSum": 0.2
+      }
+    ],
+    "source": "Open-Meteo"
+  }
+}
+```
+
+Common errors:
+
+- `400 PARK_COORDINATES_MISSING`
+- `404 PARK_NOT_FOUND`
+- `502 OPEN_METEO_REQUEST_FAILED`
+
 #### PATCH `/parks/:id`
 
 Requires auth. Only the creator or an admin can edit.
@@ -579,6 +614,10 @@ Editable fields:
 - `amenities`
 - `rules`
 - `photos`
+
+#### PUT `/parks/:id`
+
+Requires auth. Only the creator or an admin can edit. Covers the PUT requirement by updating park resource fields with the same writable fields as `PATCH /parks/:id`.
 
 #### DELETE `/parks/:id`
 
@@ -628,7 +667,7 @@ Response `201`:
     "park": "ObjectId",
     "user": {
       "id": "ObjectId",
-      "username": "mika"
+      "username": "marlon"
     }
   }
 }
