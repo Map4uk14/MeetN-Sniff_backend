@@ -16,7 +16,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon index.js",
+    "start": "nodemon index.js",
+    "start:prod": "node index.js",
+    "test": "node scripts/check-syntax.js"
   },
   "repository": {
     "type": "git",
