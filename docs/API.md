@@ -38,6 +38,8 @@ API_RATE_LIMIT=300
 AUTH_RATE_LIMIT=30
 LOGIN_RATE_LIMIT=5
 REGISTER_RATE_LIMIT=10
+OPENWEATHER_API_KEY=
+DEFAULT_NEARBY_RADIUS_METERS=5000
 ```
 
 `CORS_ORIGINS` is comma-separated. Requests with no `Origin` header are allowed for same-origin requests, cURL, server-to-server calls and mobile clients.
@@ -50,6 +52,8 @@ Security notes:
 - In production, `CORS_ORIGINS` is required and must not use localhost origins.
 - Set `TRUST_PROXY=1` when the API runs behind one trusted reverse proxy or deployment proxy.
 - Rate limits default to `300` API requests per 15 minutes, `30` auth requests per 15 minutes, `5` login attempts per 15 minutes and `10` registrations per hour.
+- `OPENWEATHER_API_KEY` is optional at server startup. The weather endpoint returns `503` when the key is missing.
+- `DEFAULT_NEARBY_RADIUS_METERS` defaults to `5000` for nearby park searches.
 
 ## Authentication
 
@@ -89,6 +93,25 @@ Common status codes:
 | `409` | Duplicate unique value |
 | `429` | Rate limit exceeded |
 | `500` | Server configuration/runtime error |
+
+## Response Formats
+
+JSON is the default response format.
+
+These park endpoints can also return XML:
+
+- `GET /parks`
+- `GET /parks/nearby`
+- `GET /parks/:idOrSlug`
+
+Use either:
+
+```http
+GET /api/parks?format=xml
+Accept: application/xml
+```
+
+XML responses use `Content-Type: application/xml`.
 
 ## Data Models
 
@@ -343,6 +366,21 @@ Returns a public user profile.
 
 ### Parks
 
+#### Park Coordinates
+
+This backend does not use Google Geocoding. Parks must be created with stored MongoDB GeoJSON coordinates.
+
+```json
+{
+  "location": {
+    "type": "Point",
+    "coordinates": [16.397, 48.216]
+  }
+}
+```
+
+MongoDB GeoJSON uses `[longitude, latitude]`, not `[latitude, longitude]`.
+
 #### GET `/parks`
 
 Lists parks.
@@ -356,7 +394,8 @@ Query parameters:
 | `amenities` | csv | Require all listed amenities |
 | `lat` | number | Latitude for nearby search |
 | `lng` | number | Longitude for nearby search |
-| `maxDistance` | number | Search radius in meters, default `5000` |
+| `maxDistance` | number | Search radius in meters, default from `DEFAULT_NEARBY_RADIUS_METERS` or `5000` |
+| `format` | string | Set to `xml` for XML response |
 | `page` | number | Default `1` |
 | `limit` | number | Default `20`, max `100` |
 
@@ -388,28 +427,80 @@ Response `200`:
 
 For geo searches, `total` and `pages` are `null` because MongoDB `$near` queries are optimized for distance ordering rather than count pagination.
 
+#### GET `/parks/nearby`
+
+Lists parks near a coordinate using the stored `park.location` GeoJSON point. Auth is not required. Admin is not required. Supports JSON and XML.
+
+Query parameters:
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `lat` | number | Required latitude |
+| `lng` | number | Required longitude |
+| `radius` | number | Optional radius in meters, default from `DEFAULT_NEARBY_RADIUS_METERS` or `5000` |
+| `format` | string | Set to `xml` for XML response |
+| `page` | number | Default `1` |
+| `limit` | number | Default `20`, max `100` |
+
+Example:
+
+```http
+GET /api/parks/nearby?lat=48.2082&lng=16.3738&radius=5000
+```
+
+Response `200`:
+
+```json
+{
+  "data": [
+    {
+      "id": "ObjectId",
+      "name": "Stadtpark Umgebung"
+    }
+  ],
+  "search": {
+    "latitude": 48.2082,
+    "longitude": 16.3738,
+    "radius": 5000
+  },
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": null,
+    "pages": null
+  }
+}
+```
+
+Common errors:
+
+- `400 INVALID_COORDINATES`
+- `400 INVALID_RADIUS`
+
 #### POST `/parks`
 
 Requires auth. Creates a park.
+
+No external geocoding API is called. `location` is required and must be a MongoDB GeoJSON `Point` with coordinates in `[longitude, latitude]` order.
 
 Request:
 
 ```json
 {
-  "name": "Volkspark Friedrichshain",
-  "description": "Large city park with open fields.",
+  "name": "Hundezone Prater",
+  "description": "Grosse Hundezone im Prater.",
   "address": {
-    "street": "Am Friedrichshain",
-    "city": "Berlin",
-    "postalCode": "10407",
-    "country": "Germany"
+    "street": "Prater Hauptallee",
+    "city": "Wien",
+    "postalCode": "1020",
+    "country": "Austria"
   },
   "location": {
     "type": "Point",
-    "coordinates": [13.4376, 52.5287]
+    "coordinates": [16.397, 48.216]
   },
-  "tags": ["off-leash", "shady"],
-  "amenities": ["water", "benches"],
+  "tags": ["large", "green", "popular"],
+  "amenities": ["fenced", "water", "benches"],
   "rules": {
     "leashRequired": false,
     "fenced": false,
@@ -431,9 +522,47 @@ Response `201`:
 }
 ```
 
+Common errors:
+
+- `400 VALIDATION_ERROR`
+- `400 LOCATION_REQUIRED`
+- `400 INVALID_LOCATION_TYPE`
+- `400 INVALID_LOCATION_COORDINATES`
+- `401 AUTH_REQUIRED`
+
 #### GET `/parks/:idOrSlug`
 
-Returns one park by MongoDB id or slug.
+Returns one park by MongoDB id or slug. Supports JSON and XML.
+
+#### GET `/parks/:id/weather`
+
+Returns current weather for a park's stored coordinates. Auth is not required. Admin is not required. Requires `OPENWEATHER_API_KEY`.
+
+Response `200`:
+
+```json
+{
+  "park": {
+    "id": "ObjectId",
+    "name": "Prater Hundezone"
+  },
+  "weather": {
+    "temperature": 21.4,
+    "feelsLike": 20.9,
+    "description": "clear sky",
+    "icon": "01d",
+    "humidity": 55,
+    "windSpeed": 3.2,
+    "source": "OpenWeather"
+  }
+}
+```
+
+Common errors:
+
+- `400 PARK_COORDINATES_MISSING`
+- `404 PARK_NOT_FOUND`
+- `503 OPENWEATHER_NOT_CONFIGURED`
 
 #### PATCH `/parks/:id`
 
@@ -527,3 +656,92 @@ Editable fields:
 Requires auth. Only the review author or an admin can delete.
 
 Response `204`.
+
+### Admin
+
+All admin routes require a valid JWT and `role: "admin"`.
+
+#### GET `/admin/users`
+
+Lists users.
+
+Query parameters: `page`, `limit`.
+
+Response `200`:
+
+```json
+{
+  "data": [
+    {
+      "id": "ObjectId",
+      "username": "admin",
+      "email": "admin@meetn-sniff.demo",
+      "role": "admin"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1,
+    "pages": 1
+  }
+}
+```
+
+Common errors: `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`.
+
+#### PATCH `/admin/users/:id/role`
+
+Changes a user's role.
+
+Request:
+
+```json
+{
+  "role": "admin"
+}
+```
+
+Allowed roles: `user`, `admin`.
+
+Common errors: `400 INVALID_ROLE`, `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`, `404 USER_NOT_FOUND`.
+
+#### DELETE `/admin/users/:id`
+
+Deletes a user and that user's reviews. Affected park ratings are recalculated. Admins cannot delete their own account through this endpoint.
+
+Response `204`.
+
+Common errors: `400 CANNOT_DELETE_SELF`, `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`, `404 USER_NOT_FOUND`.
+
+#### GET `/admin/reviews`
+
+Lists reviews with populated user and park summaries.
+
+Query parameters: `page`, `limit`.
+
+Common errors: `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`.
+
+#### DELETE `/admin/reviews/:id`
+
+Deletes a review and recalculates the affected park rating.
+
+Response `204`.
+
+Common errors: `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`, `404 REVIEW_NOT_FOUND`.
+
+#### GET `/admin/parks`
+
+Lists parks.
+
+Query parameters: `page`, `limit`.
+
+Common errors: `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`.
+
+#### DELETE `/admin/parks/:id`
+
+Deletes a park, its reviews and removes it from user favorites.
+
+Response `204`.
+
+Common errors: `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`, `404 PARK_NOT_FOUND`.
