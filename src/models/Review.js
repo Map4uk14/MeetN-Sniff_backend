@@ -47,7 +47,7 @@ reviewSchema.statics.recalculateParkRating = async function recalculateParkRatin
       }
     : { averageRating: 0, reviewCount: 0 };
 
-  return Park.findByIdAndUpdate(parkId, { ratingSummary }, { new: true });
+  return Park.findByIdAndUpdate(parkId, { ratingSummary }, { returnDocument: 'after' });
 };
 
 module.exports = mongoose.model('Review', reviewSchema);
