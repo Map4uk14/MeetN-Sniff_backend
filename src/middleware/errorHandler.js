@@ -32,7 +32,7 @@ function errorHandler(error, _req, res, _next) {
     res.status(400).json({
       error: {
         code: 'INVALID_ID',
-        message: `Invalid ${error.path}: ${error.value}`,
+        message: 'Invalid resource identifier',
       },
     });
     return;
@@ -42,8 +42,7 @@ function errorHandler(error, _req, res, _next) {
     res.status(409).json({
       error: {
         code: 'DUPLICATE_KEY',
-        message: 'A resource with that unique value already exists',
-        details: error.keyValue || {},
+        message: 'A resource with that value already exists',
       },
     });
     return;

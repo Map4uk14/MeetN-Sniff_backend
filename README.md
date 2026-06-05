@@ -17,7 +17,7 @@ npm install
 cp .env.example .env
 ```
 
-Update `.env` with your MongoDB connection string and a strong `JWT_SECRET`.
+Update `.env` with your MongoDB connection string and a strong `JWT_SECRET` with at least 32 characters.
 
 ## Run
 
@@ -69,6 +69,14 @@ MeetN-Sniff_backend/
 ## Frontend/Backend Origin
 
 The API is mounted under `/api`, so frontend and backend can share one origin in production through a reverse proxy or deployment platform. For local development, set `CORS_ORIGINS` in `.env` to the frontend dev server origin, for example `http://localhost:5173`.
+
+## Security Defaults
+
+- Security headers are enabled with Helmet.
+- `/api` routes are rate-limited.
+- Auth routes have stricter login/register limits.
+- JWTs use HS256 with issuer/audience checks and a token version for logout/revocation.
+- Production requires explicit non-localhost `CORS_ORIGINS`.
 
 ## License
 

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 
+const { getJwtConfig } = require('../config/security');
 const User = require('../models/User');
 const { createHttpError } = require('./errorHandler');
 
@@ -21,15 +22,20 @@ async function requireAuth(req, _res, next) {
       throw createHttpError(401, 'Missing bearer token', 'AUTH_REQUIRED');
     }
 
-    if (!process.env.JWT_SECRET) {
-      throw createHttpError(500, 'JWT_SECRET is not configured', 'SERVER_CONFIG_ERROR');
-    }
-
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const jwtConfig = getJwtConfig();
+    const payload = jwt.verify(token, jwtConfig.secret, {
+      algorithms: [jwtConfig.algorithm],
+      audience: jwtConfig.audience,
+      issuer: jwtConfig.issuer,
+    });
     const user = await User.findById(payload.sub);
 
     if (!user) {
       throw createHttpError(401, 'User for token no longer exists', 'INVALID_TOKEN');
+    }
+
+    if ((payload.tokenVersion || 0) !== (user.tokenVersion || 0)) {
+      throw createHttpError(401, 'Token has been revoked', 'TOKEN_REVOKED');
     }
 
     req.user = user;

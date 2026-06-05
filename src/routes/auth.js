@@ -1,30 +1,39 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 
+const { getJwtConfig } = require('../config/security');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const { requireAuth } = require('../middleware/auth');
 const { createHttpError } = require('../middleware/errorHandler');
+const { authLimiter, loginLimiter, registerLimiter } = require('../middleware/rateLimiters');
 
 const router = express.Router();
 
+router.use(authLimiter);
+
 function signToken(user) {
-  if (!process.env.JWT_SECRET) {
-    throw createHttpError(500, 'JWT_SECRET is not configured', 'SERVER_CONFIG_ERROR');
-  }
+  const jwtConfig = getJwtConfig();
 
   return jwt.sign(
     {
       sub: user._id.toString(),
       role: user.role,
+      tokenVersion: user.tokenVersion || 0,
     },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
+    jwtConfig.secret,
+    {
+      algorithm: jwtConfig.algorithm,
+      audience: jwtConfig.audience,
+      expiresIn: jwtConfig.expiresIn,
+      issuer: jwtConfig.issuer,
+    },
   );
 }
 
 router.post(
   '/register',
+  registerLimiter,
   asyncHandler(async (req, res) => {
     const { username, email, password, displayName, dog } = req.body;
 
@@ -45,6 +54,7 @@ router.post(
 
 router.post(
   '/login',
+  loginLimiter,
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
@@ -68,5 +78,15 @@ router.post(
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user.toPrivateJSON() });
 });
+
+router.post(
+  '/logout',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await User.updateOne({ _id: req.user._id }, { $inc: { tokenVersion: 1 } });
+
+    res.status(204).send();
+  }),
+);
 
 module.exports = router;

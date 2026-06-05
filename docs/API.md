@@ -28,12 +28,28 @@ Two separate processes cannot bind the exact same host and port at the same time
 ```env
 PORT=3000
 MONGODB_URI=mongodb://127.0.0.1:27017/meetn-sniff
-JWT_SECRET=replace-this-with-a-long-random-secret
-JWT_EXPIRES_IN=7d
+JWT_SECRET=replace-this-with-a-long-random-secret-minimum-32-chars
+JWT_EXPIRES_IN=1h
+JWT_ISSUER=meetn-sniff-api
+JWT_AUDIENCE=meetn-sniff-client
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+TRUST_PROXY=0
+API_RATE_LIMIT=300
+AUTH_RATE_LIMIT=30
+LOGIN_RATE_LIMIT=5
+REGISTER_RATE_LIMIT=10
 ```
 
 `CORS_ORIGINS` is comma-separated. Requests with no `Origin` header are allowed for same-origin requests, cURL, server-to-server calls and mobile clients.
+
+Security notes:
+
+- `JWT_SECRET` must be at least `32` characters long.
+- JWTs use `HS256` with configured issuer and audience checks.
+- `JWT_EXPIRES_IN` defaults to `1h`.
+- In production, `CORS_ORIGINS` is required and must not use localhost origins.
+- Set `TRUST_PROXY=1` when the API runs behind one trusted reverse proxy or deployment proxy.
+- Rate limits default to `300` API requests per 15 minutes, `30` auth requests per 15 minutes, `5` login attempts per 15 minutes and `10` registrations per hour.
 
 ## Authentication
 
@@ -71,6 +87,7 @@ Common status codes:
 | `403` | Authenticated but not allowed |
 | `404` | Resource not found |
 | `409` | Duplicate unique value |
+| `429` | Rate limit exceeded |
 | `500` | Server configuration/runtime error |
 
 ## Data Models
@@ -255,6 +272,12 @@ Response `200`:
 #### GET `/auth/me`
 
 Requires auth. Returns the current authenticated user.
+
+#### POST `/auth/logout`
+
+Requires auth. Revokes the current user's existing JWTs by incrementing the user's token version.
+
+Response `204`.
 
 ### Users
 

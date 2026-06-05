@@ -41,6 +41,7 @@ const userSchema = new mongoose.Schema(
     dog: { type: dogSchema, default: () => ({}) },
     favoriteParks: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Park' }],
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    tokenVersion: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );
@@ -71,6 +72,7 @@ userSchema.set('toJSON', {
   transform(_doc, ret) {
     toJSONTransform(_doc, ret);
     delete ret.passwordHash;
+    delete ret.tokenVersion;
     return ret;
   },
 });
