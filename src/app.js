@@ -3,6 +3,7 @@ const express = require('express');
 const helmet = require('helmet');
 
 const { buildCorsOptions } = require('./config/cors');
+const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const parkRoutes = require('./routes/parks');
 const reviewRoutes = require('./routes/reviews');
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/parks', parkRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
