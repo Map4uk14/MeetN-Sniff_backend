@@ -7,6 +7,8 @@ const Park = require('../models/Park');
 const Review = require('../models/Review');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination, parseList, pick } = require('../utils/request');
+const { getCurrentWeatherByCoordinates, validateCoordinates } = require('../services/weatherService');
+const { sendFormatted } = require('../utils/responseFormat');
 
 const router = express.Router();
 
@@ -39,6 +41,51 @@ function assertCanEditPark(req, park) {
   }
 }
 
+function readNearbyRadius(query) {
+  const radius = Number(query.radius || query.maxDistance || process.env.DEFAULT_NEARBY_RADIUS_METERS || 5000);
+
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw createHttpError(400, 'radius must be a positive number', 'INVALID_RADIUS');
+  }
+
+  return radius;
+}
+
+function validateParkLocationPayload(location) {
+  if (!location) {
+    throw createHttpError(400, 'location is required and must be a GeoJSON Point', 'LOCATION_REQUIRED');
+  }
+
+  if (location.type !== 'Point') {
+    throw createHttpError(400, 'location.type must be Point', 'INVALID_LOCATION_TYPE');
+  }
+
+  if (!Array.isArray(location.coordinates) || location.coordinates.length !== 2) {
+    throw createHttpError(400, 'location.coordinates must be [longitude, latitude]', 'INVALID_LOCATION_COORDINATES');
+  }
+
+  const [longitude, latitude] = location.coordinates;
+
+  if (typeof longitude !== 'number' || typeof latitude !== 'number' || !Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    throw createHttpError(400, 'location.coordinates must contain two numbers', 'INVALID_LOCATION_COORDINATES');
+  }
+
+  if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+    throw createHttpError(400, 'location.coordinates are outside the valid range', 'INVALID_LOCATION_COORDINATES');
+  }
+}
+
+function getParkCoordinates(park) {
+  const coordinates = park.location?.coordinates;
+
+  if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+    throw createHttpError(400, 'Park does not have valid coordinates', 'PARK_COORDINATES_MISSING');
+  }
+
+  const [longitude, latitude] = coordinates;
+  return validateCoordinates(latitude, longitude);
+}
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -61,17 +108,12 @@ router.get(
     }
 
     if (hasGeoSearch) {
-      const latitude = Number(req.query.lat);
-      const longitude = Number(req.query.lng);
-
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        throw createHttpError(400, 'lat and lng must be valid numbers', 'INVALID_COORDINATES');
-      }
+      const { latitude, longitude } = validateCoordinates(req.query.lat, req.query.lng);
 
       query.location = {
         $near: {
           $geometry: { type: 'Point', coordinates: [longitude, latitude] },
-          $maxDistance: Number(req.query.maxDistance) || 5000,
+          $maxDistance: readNearbyRadius(req.query),
         },
       };
     }
@@ -88,7 +130,7 @@ router.get(
     const totalPromise = hasGeoSearch ? Promise.resolve(null) : Park.countDocuments(query);
     const [parks, total] = await Promise.all([parksPromise, totalPromise]);
 
-    res.json({
+    sendFormatted(req, res, 'parks', {
       data: parks,
       pagination: {
         page,
@@ -100,16 +142,74 @@ router.get(
   }),
 );
 
+router.get(
+  '/nearby',
+  asyncHandler(async (req, res) => {
+    const { page, limit, skip } = getPagination(req.query);
+    const { latitude, longitude } = validateCoordinates(req.query.lat, req.query.lng);
+    const radius = readNearbyRadius(req.query);
+
+    const query = {
+      location: {
+        $near: {
+          $geometry: { type: 'Point', coordinates: [longitude, latitude] },
+          $maxDistance: radius,
+        },
+      },
+    };
+
+    const parks = await Park.find(query)
+      .skip(skip)
+      .limit(limit)
+      .populate('createdBy', 'username displayName avatarUrl');
+
+    sendFormatted(req, res, 'parks', {
+      data: parks,
+      search: {
+        latitude,
+        longitude,
+        radius,
+      },
+      pagination: {
+        page,
+        limit,
+        total: null,
+        pages: null,
+      },
+    });
+  }),
+);
+
 router.post(
   '/',
   requireAuth,
   asyncHandler(async (req, res) => {
+    const payload = pick(req.body, writableParkFields);
+    validateParkLocationPayload(payload.location);
+
     const park = await Park.create({
-      ...pick(req.body, writableParkFields),
+      ...payload,
       createdBy: req.user._id,
     });
 
     res.status(201).json({ park });
+  }),
+);
+
+router.get(
+  '/:id/weather',
+  asyncHandler(async (req, res) => {
+    const park = await findParkOrThrow(req.params.id);
+    const { latitude, longitude } = getParkCoordinates(park);
+    const weather = await getCurrentWeatherByCoordinates(latitude, longitude);
+
+    res.json({
+      park: {
+        id: park.id,
+        name: park.name,
+      },
+      weather,
+    });
   }),
 );
 
@@ -166,7 +266,7 @@ router.get(
       throw createHttpError(404, 'Park not found', 'PARK_NOT_FOUND');
     }
 
-    res.json({ park });
+    sendFormatted(req, res, 'park', { park });
   }),
 );
 
@@ -176,8 +276,13 @@ router.patch(
   asyncHandler(async (req, res) => {
     const park = await findParkOrThrow(req.params.id);
     assertCanEditPark(req, park);
+    const updates = pick(req.body, writableParkFields);
 
-    Object.assign(park, pick(req.body, writableParkFields));
+    if (Object.prototype.hasOwnProperty.call(updates, 'location')) {
+      validateParkLocationPayload(updates.location);
+    }
+
+    Object.assign(park, updates);
     await park.save();
 
     res.json({ park });
