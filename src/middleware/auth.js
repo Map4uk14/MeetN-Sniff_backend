@@ -34,6 +34,7 @@ async function requireAuth(req, _res, next) {
       throw createHttpError(401, 'User for token no longer exists', 'INVALID_TOKEN');
     }
 
+    // Incrementing tokenVersion invalidates older JWTs without storing token state.
     if ((payload.tokenVersion || 0) !== (user.tokenVersion || 0)) {
       throw createHttpError(401, 'Token has been revoked', 'TOKEN_REVOKED');
     }

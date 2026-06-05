@@ -30,6 +30,7 @@ const locationSchema = new mongoose.Schema(
             return false;
           }
 
+          // GeoJSON uses [longitude, latitude]; this order matters for 2dsphere indexes.
           const [longitude, latitude] = value;
           return longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90;
         },

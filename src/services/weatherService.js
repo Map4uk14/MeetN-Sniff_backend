@@ -24,6 +24,7 @@ function validateCoordinates(lat, lng) {
 async function getCurrentWeatherByCoordinates(lat, lng) {
   const apiKey = process.env.OPENWEATHER_API_KEY;
 
+  // Keep startup independent from external weather credentials; fail only when this endpoint is used.
   if (!apiKey) {
     throw createHttpError(503, 'OpenWeather API key is not configured', 'OPENWEATHER_NOT_CONFIGURED');
   }

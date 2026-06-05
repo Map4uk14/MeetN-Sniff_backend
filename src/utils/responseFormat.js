@@ -13,6 +13,7 @@ function sendFormatted(req, res, rootName, payload) {
     return;
   }
 
+  // Convert Mongoose documents to plain objects before handing them to the XML serializer.
   const plainPayload = JSON.parse(JSON.stringify(payload));
   res.type('application/xml').send(js2xmlparser.parse(rootName, plainPayload));
 }

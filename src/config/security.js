@@ -33,6 +33,7 @@ function validateProductionCors(env = process.env) {
     throw new Error('CORS_ORIGINS must be set in production');
   }
 
+  // Production must name real origins explicitly; localhost is only acceptable for development.
   const localOrigin = origins.find((origin) => {
     try {
       const parsed = new URL(origin);

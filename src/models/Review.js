@@ -29,6 +29,7 @@ reviewSchema.index({ park: 1, user: 1 }, { unique: true });
 reviewSchema.statics.recalculateParkRating = async function recalculateParkRating(parkId) {
   const Park = mongoose.model('Park');
   const normalizedParkId = new mongoose.Types.ObjectId(parkId);
+  // Park ratings are derived from reviews so they stay consistent after edits or deletes.
   const [summary] = await this.aggregate([
     { $match: { park: normalizedParkId } },
     {
