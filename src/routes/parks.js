@@ -7,6 +7,7 @@ const Park = require('../models/Park');
 const Review = require('../models/Review');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination, parseList, pick } = require('../utils/request');
+const { getForecastByCoordinates } = require('../services/openMeteoService');
 const { getCurrentWeatherByCoordinates, validateCoordinates } = require('../services/weatherService');
 const { sendFormatted } = require('../utils/responseFormat');
 
@@ -64,6 +65,7 @@ function validateParkLocationPayload(location) {
     throw createHttpError(400, 'location.coordinates must be [longitude, latitude]', 'INVALID_LOCATION_COORDINATES');
   }
 
+  // GeoJSON and MongoDB store points as [longitude, latitude].
   const [longitude, latitude] = location.coordinates;
 
   if (typeof longitude !== 'number' || typeof latitude !== 'number' || !Number.isFinite(longitude) || !Number.isFinite(latitude)) {
@@ -82,8 +84,22 @@ function getParkCoordinates(park) {
     throw createHttpError(400, 'Park does not have valid coordinates', 'PARK_COORDINATES_MISSING');
   }
 
+  // Weather APIs expect latitude/longitude, so convert from the stored GeoJSON order.
   const [longitude, latitude] = coordinates;
   return validateCoordinates(latitude, longitude);
+}
+
+async function updateParkFromRequest(req, park) {
+  const updates = pick(req.body, writableParkFields);
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'location')) {
+    validateParkLocationPayload(updates.location);
+  }
+
+  Object.assign(park, updates);
+  await park.save();
+
+  return park;
 }
 
 router.get(
@@ -127,6 +143,7 @@ router.get(
     }
 
     const parksPromise = findQuery.skip(skip).limit(limit);
+    // $near already sorts by distance and cannot be counted with countDocuments.
     const totalPromise = hasGeoSearch ? Promise.resolve(null) : Park.countDocuments(query);
     const [parks, total] = await Promise.all([parksPromise, totalPromise]);
 
@@ -214,6 +231,23 @@ router.get(
 );
 
 router.get(
+  '/:id/forecast',
+  asyncHandler(async (req, res) => {
+    const park = await findParkOrThrow(req.params.id);
+    const { latitude, longitude } = getParkCoordinates(park);
+    const forecast = await getForecastByCoordinates(latitude, longitude);
+
+    res.json({
+      park: {
+        id: park.id,
+        name: park.name,
+      },
+      forecast,
+    });
+  }),
+);
+
+router.get(
   '/:parkId/reviews',
   asyncHandler(async (req, res) => {
     const park = await findParkOrThrow(req.params.parkId);
@@ -276,14 +310,21 @@ router.patch(
   asyncHandler(async (req, res) => {
     const park = await findParkOrThrow(req.params.id);
     assertCanEditPark(req, park);
-    const updates = pick(req.body, writableParkFields);
 
-    if (Object.prototype.hasOwnProperty.call(updates, 'location')) {
-      validateParkLocationPayload(updates.location);
-    }
+    await updateParkFromRequest(req, park);
 
-    Object.assign(park, updates);
-    await park.save();
+    res.json({ park });
+  }),
+);
+
+router.put(
+  '/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const park = await findParkOrThrow(req.params.id);
+    assertCanEditPark(req, park);
+
+    await updateParkFromRequest(req, park);
 
     res.json({ park });
   }),
