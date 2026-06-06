@@ -43,13 +43,13 @@ Parks store coordinates directly as MongoDB GeoJSON Points in `[longitude, latit
 ```bash
 npm run test
 npm run seed
-npm start
+npm run dev
 ```
 
-Production:
+Run without hot reload:
 
 ```bash
-npm run start:prod
+npm start
 ```
 
 Health check:

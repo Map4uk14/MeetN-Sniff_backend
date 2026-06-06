@@ -21,7 +21,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "seed": "node scripts/seed.js",
-    "start": "nodemon index.js",
+    "start": "node index.js",
     "start:prod": "node index.js",
     "test": "node scripts/check-syntax.js"
   },

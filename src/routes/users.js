@@ -11,6 +11,13 @@ const router = express.Router();
 
 const writableProfileFields = ['displayName', 'avatarUrl', 'bio', 'dog'];
 
+function toFavoriteParkResponse(park) {
+  return {
+    id: park.id,
+    name: park.name,
+  };
+}
+
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user.toPrivateJSON() });
 });
@@ -52,7 +59,7 @@ router.post(
       await req.user.save();
     }
 
-    res.status(201).json({ park });
+    res.status(201).json({ park: toFavoriteParkResponse(park) });
   }),
 );
 

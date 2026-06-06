@@ -5,6 +5,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createHttpError } = require('../middleware/errorHandler');
 const Park = require('../models/Park');
 const Review = require('../models/Review');
+const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination, parseList, pick } = require('../utils/request');
 const { getForecastByCoordinates } = require('../services/openMeteoService');
@@ -87,6 +88,14 @@ function getParkCoordinates(park) {
   // Weather APIs expect latitude/longitude, so convert from the stored GeoJSON order.
   const [longitude, latitude] = coordinates;
   return validateCoordinates(latitude, longitude);
+}
+
+function toCreatedParkResponse(park) {
+  return {
+    id: park.id,
+    name: park.name,
+    slug: park.slug,
+  };
 }
 
 async function updateParkFromRequest(req, park) {
@@ -209,7 +218,7 @@ router.post(
       createdBy: req.user._id,
     });
 
-    res.status(201).json({ park });
+    res.status(201).json({ park: toCreatedParkResponse(park) });
   }),
 );
 
@@ -337,8 +346,11 @@ router.delete(
     const park = await findParkOrThrow(req.params.id);
     assertCanEditPark(req, park);
 
-    await Review.deleteMany({ park: park._id });
-    await park.deleteOne();
+    await Promise.all([
+      Review.deleteMany({ park: park._id }),
+      User.updateMany({ favoriteParks: park._id }, { $pull: { favoriteParks: park._id } }),
+      park.deleteOne(),
+    ]);
 
     res.status(204).send();
   }),
