@@ -1,83 +1,135 @@
 # MeetN-Sniff Backend
 
-A Node.js/Express backend application for the MeetN-Sniff platform with MongoDB database integration, JWT authentication, and RESTful APIs.
+Node.js/Express backend for MeetN-Sniff with MongoDB, JWT authentication, park discovery, favorites, reviews, admin routes and external weather services.
+
+- API documentation: [docs/API.md](docs/API.md)
+- Backend requirement status: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js 18 or newer
 - npm
-- MongoDB (local or cloud instance)
+- MongoDB local, remote or reachable through an SSH tunnel
 
-## Installation
+## Setup
 
-1. Clone the repository:
-```bash
-git clone https://github.com/Map4uk14/MeetN-Sniff_backend.git
-cd MeetN-Sniff_backend
-```
-
-2. Install dependencies:
 ```bash
 npm install
+cp .env.example .env
 ```
 
-3. Create a `.env` file in the root directory with your environment variables:
+Update `.env` with your MongoDB connection string and a strong `JWT_SECRET` with at least 32 characters.
+
+Relevant environment variables:
+
 ```env
 PORT=3000
-MONGODB_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret_key
+MONGODB_URI=mongodb://127.0.0.1:27017/meetn-sniff
+JWT_SECRET=replace-this-with-a-long-random-secret-minimum-32-chars
+JWT_EXPIRES_IN=1h
+JWT_ISSUER=meetn-sniff-api
+JWT_AUDIENCE=meetn-sniff-client
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+OPENWEATHER_API_KEY=
+DEFAULT_NEARBY_RADIUS_METERS=5000
 ```
 
-## Running the Project
+`OPENWEATHER_API_KEY` is optional at startup. The weather endpoint returns `503` until the key is configured.
 
-### Development
+Parks store coordinates directly as MongoDB GeoJSON Points in `[longitude, latitude]` order.
+
+## Run
+
 ```bash
+npm run test
+npm run seed
 npm run dev
 ```
-The server will start with hot reload using Nodemon.
 
-### Production
+Run without hot reload:
+
 ```bash
 npm start
 ```
 
-## Project Structure
- 
-```
-MeetN-Sniff_backend/
-├── package.json
-├── .env
-├── .env.example
-├── .gitignore
-```
- 
-## Technologies Used 
- 
-- **Express.js** - Web framework for Node.js
-- **MongoDB & Mongoose** - Database and ODM
-- **JWT (jsonwebtoken)** - Authentication
-- **bcryptjs** - Password hashing
-- **CORS** - Cross-Origin Resource Sharing
-- **Axios** - HTTP client
-- **dotenv** - Environment variable management
-- **Nodemon** - Development server with auto-reload
+Health check:
 
-## API Documentation
- 
-[Add API endpoints documentation here]
- 
-## Contributing 
- 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+```bash
+curl http://localhost:3000/api/health
+```
+
+## Scripts
+
+```bash
+npm test
+```
+
+Runs a syntax check across backend source files.
+
+```bash
+npm run seed
+```
+
+Inserts demo users, Vienna parks and reviews. The script is idempotent for its known demo records and uses `MONGODB_URI` from `.env`.
+
+Demo logins:
+
+```text
+admin@meetn-sniff.demo / MeetNSniffDemo123!
+marlon@meetn-sniff.demo / MeetNSniffDemo123!
+gamal@meetn-sniff.demo / MeetNSniffDemo123!
+```
+
+## Project Structure
+
+```text
+MeetN-Sniff_backend/
+├── docs/
+│   ├── API.md
+│   └── REQUIREMENTS.md
+├── index.js
+├── scripts/
+│   ├── check-syntax.js
+│   └── seed.js
+├── src/
+│   ├── app.js
+│   ├── config/
+│   ├── middleware/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   └── utils/
+├── .env.example
+├── package.json
+└── package-lock.json
+```
+
+## Backend Features
+
+- REST API mounted under `/api`
+- JSON responses by default
+- Optional XML for selected park GET endpoints through `?format=xml` or `Accept: application/xml`
+- JWT register/login/logout/session checks
+- Protected user, park, review and admin routes
+- MongoDB GeoJSON nearby search
+- OpenWeather current weather via `GET /api/parks/:id/weather`
+- Open-Meteo forecast via `GET /api/parks/:id/forecast`
+- Demo seed data for Vienna parks
+
+## Security Defaults
+
+- Helmet security headers
+- CORS allow-list through `CORS_ORIGINS`
+- API and auth rate limits
+- JWT issuer/audience checks
+- JWT token version invalidation on logout
+- Password hashes are never returned in JSON/XML responses
+
+## Notes
+
+- No API keys are committed.
+- If the database is reached through SSH tunneling, `MONGODB_URI` usually points to `127.0.0.1:<local-tunnel-port>`.
 
 ## License
 
-ISC License - see LICENSE file for details
-
-## Support 
-
-For issues and questions, please open an issue on [GitHub Issues](https://github.com/Map4uk14/MeetN-Sniff_backend/issues)
+ISC License - see LICENSE file for details.

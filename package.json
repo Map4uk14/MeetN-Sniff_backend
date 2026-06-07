@@ -5,6 +5,9 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "js2xmlparser": "^5.0.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.0"
   },
@@ -16,7 +19,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon index.js",
+    "seed": "node scripts/seed.js",
+    "start": "node index.js",
+    "start:prod": "node index.js",
+    "test": "node scripts/check-syntax.js"
   },
   "repository": {
     "type": "git",
