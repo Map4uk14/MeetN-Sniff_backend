@@ -5,6 +5,7 @@ const { createHttpError } = require('../middleware/errorHandler');
 const Park = require('../models/Park');
 const Review = require('../models/Review');
 const User = require('../models/User');
+const { deleteUserAndOwnedData } = require('../services/userDeletionService');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination } = require('../utils/request');
 
@@ -61,12 +62,7 @@ router.delete(
       throw createHttpError(404, 'User not found', 'USER_NOT_FOUND');
     }
 
-    const reviews = await Review.find({ user: user._id }).select('park');
-    const affectedParkIds = [...new Set(reviews.map((review) => review.park.toString()))];
-
-    await Promise.all([Review.deleteMany({ user: user._id }), user.deleteOne()]);
-
-    await Promise.all(affectedParkIds.map((parkId) => Review.recalculateParkRating(parkId)));
+    await deleteUserAndOwnedData(user);
 
     res.status(204).send();
   }),
