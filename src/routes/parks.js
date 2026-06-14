@@ -136,6 +136,7 @@ async function updateParkFromRequest(req, park) {
 }
 
 function buildImportedPark(candidate, requestBody, userId) {
+  // Location and source come from the server-side OSM lookup; the client may only complete park metadata.
   const overrides = pick(requestBody || {}, ['name', 'description', 'address', 'tags', 'amenities', 'rules', 'photos']);
   const addressOverrides =
     overrides.address && typeof overrides.address === 'object'

@@ -33,6 +33,7 @@ function getCachedResponse(key) {
 
 function cacheResponse(key, payload, ttlMs) {
   if (responseCache.size >= MAX_CACHE_ENTRIES) {
+    // Map keeps insertion order, so this drops the oldest cached query.
     responseCache.delete(responseCache.keys().next().value);
   }
 
@@ -93,6 +94,7 @@ async function requestOverpass(query, cacheKey) {
 }
 
 function getElementCoordinates(element) {
+  // Nodes expose coordinates directly; ways and relations use the center requested in Overpass QL.
   const latitude = element.lat ?? element.center?.lat;
   const longitude = element.lon ?? element.center?.lon;
 
@@ -120,6 +122,7 @@ function calculateDistanceMeters(origin, coordinates) {
     return undefined;
   }
 
+  // Haversine distance is accurate enough for sorting nearby discovery results.
   const toRadians = (value) => (value * Math.PI) / 180;
   const earthRadiusMeters = 6371000;
   const latitudeDelta = toRadians(coordinates.latitude - origin.latitude);
@@ -192,6 +195,7 @@ function validateElementReference(elementType, elementId) {
 
 async function discoverDogParks(latitude, longitude, radius, limit) {
   const timeoutSeconds = Math.max(1, Math.floor(getConfig().timeoutMs / 1000));
+  // nwr searches nodes, ways and relations in one query; "out center" adds coordinates for areas.
   const query = [
     `[out:json][timeout:${timeoutSeconds}];`,
     '(',
