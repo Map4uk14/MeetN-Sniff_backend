@@ -58,9 +58,9 @@ function readNearbyRadius(query) {
 function readDiscoveryRadius(query) {
   const fallback = Number(process.env.OVERPASS_DEFAULT_RADIUS_METERS) || 3000;
   const maximum = Number(process.env.OVERPASS_MAX_RADIUS_METERS) || 10000;
-  const radius = Number(query.radius || fallback);
+  const radius = query.radius === undefined ? fallback : Number(query.radius);
 
-  if (!Number.isFinite(radius) || radius <= 0 || radius > maximum) {
+  if (!Number.isFinite(radius) || radius < 1 || radius > maximum) {
     throw createHttpError(400, `radius must be between 1 and ${maximum} meters`, 'INVALID_DISCOVERY_RADIUS');
   }
 
@@ -301,7 +301,25 @@ router.post(
     }
 
     const candidate = await getDogParkByReference(elementType, elementId);
-    const park = await Park.create(buildImportedPark(candidate, req.body, req.user._id));
+    let park;
+
+    try {
+      park = await Park.create(buildImportedPark(candidate, req.body, req.user._id));
+    } catch (error) {
+      if (error.code === 11000) {
+        const importedPark = await Park.exists({
+          'externalSource.provider': 'openstreetmap',
+          'externalSource.elementType': elementType,
+          'externalSource.elementId': elementId,
+        });
+
+        if (importedPark) {
+          throw createHttpError(409, 'OpenStreetMap dog park has already been imported', 'OSM_PARK_ALREADY_IMPORTED');
+        }
+      }
+
+      throw error;
+    }
 
     res.status(201).json({ park: toCreatedParkResponse(park) });
   }),
