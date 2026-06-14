@@ -347,6 +347,20 @@ Request:
 }
 ```
 
+#### DELETE `/users/me`
+
+Requires auth. Permanently deletes the current account.
+
+The deletion also:
+
+- deletes parks created by the user,
+- deletes reviews written by the user,
+- deletes reviews belonging to the user's parks,
+- removes deleted parks from all user favorites,
+- recalculates ratings for surviving parks affected by deleted reviews.
+
+Response `204`.
+
 #### GET `/users/me/favorites`
 
 Requires auth. Returns the current user's favorite parks.
@@ -895,7 +909,7 @@ Common errors: `400 INVALID_ROLE`, `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`, `4
 
 #### DELETE `/admin/users/:id`
 
-Deletes a user and that user's reviews. Affected park ratings are recalculated. Admins cannot delete their own account through this endpoint.
+Deletes a user with the same dependent-data cleanup as `DELETE /users/me`. Affected ratings are recalculated. Admins cannot delete their own account through this endpoint.
 
 Response `204`.
 

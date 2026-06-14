@@ -115,6 +115,7 @@ MeetN-Sniff_backend/
 - Optional XML for selected park GET endpoints through `?format=xml` or `Accept: application/xml`
 - JWT register/login/logout/session checks
 - Protected user, park, review and admin routes
+- Account deletion with cleanup of owned parks, reviews and favorites
 - MongoDB GeoJSON nearby search
 - OpenStreetMap dog park discovery via `GET /api/parks/discover`
 - Authenticated import of discovered dog parks into MongoDB

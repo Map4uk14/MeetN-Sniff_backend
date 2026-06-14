@@ -17,7 +17,7 @@ The frontend requirements are listed separately so the backend repository does n
 | S1: At least two external REST services | Done | OpenWeather is used by `src/services/weatherService.js`; Open-Meteo Forecast is used by `src/services/openMeteoService.js`. |
 | C1: At least three external REST services | Done | OpenStreetMap Overpass is used for dog park discovery in addition to OpenWeather and Open-Meteo. |
 | C2: BE endpoints return JSON and XML | Done | Selected park GET endpoints support both JSON and XML through content negotiation or `?format=xml`. |
-| C3: BE provides a PATCH endpoint consumed by the FE | Backend done, FE pending | PATCH endpoints exist for parks, reviews, user profiles and admin role changes. The separate frontend must consume at least one of them to complete the system requirement. |
+| C3: BE provides a PATCH endpoint consumed by the FE | Done | The backend provides several PATCH endpoints. The frontend consumes `PATCH /api/users/me` for profile editing. |
 
 ## Frontend Scope
 
@@ -31,7 +31,7 @@ These requirements depend on the separate frontend repository and are not implem
 | S2: Second FE component using at least three BE endpoints | Out of backend scope | Frontend should provide this component/view. |
 | S3: W3C-compliant frontend | Out of backend scope | Frontend HTML should be validated with https://validator.w3.org/. |
 | S4: Responsive frontend | Out of backend scope | Frontend CSS/layout must provide mobile and desktop views. |
-| C3: FE consumes a PATCH endpoint | Backend ready | Frontend must call at least one available PATCH endpoint, for example `PATCH /api/users/me` or `PATCH /api/parks/:id`. |
+| C3: FE consumes a PATCH endpoint | Done | The frontend profile view calls `PATCH /api/users/me` through its centralized API module. |
 
 ## Backend Endpoint Evidence
 
@@ -46,6 +46,7 @@ These requirements depend on the separate frontend repository and are not implem
 | PUT resource | `PUT /api/parks/:id` |
 | PATCH resource | `PATCH /api/parks/:id`, `PATCH /api/users/me`, `PATCH /api/reviews/:id`, `PATCH /api/admin/users/:id/role` |
 | DELETE resource | `DELETE /api/parks/:id` |
+| Account deletion | `DELETE /api/users/me` removes the user and dependent parks, reviews and favorite references |
 | External REST #1 | `GET /api/parks/:id/weather` uses OpenWeather |
 | External REST #2 | `GET /api/parks/:id/forecast` uses Open-Meteo |
 | External REST #3 | `GET /api/parks/discover` uses OpenStreetMap Overpass |
