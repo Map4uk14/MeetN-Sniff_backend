@@ -9,8 +9,10 @@ const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination, parseList, pick } = require('../utils/request');
 const { getForecastByCoordinates } = require('../services/openMeteoService');
+const { discoverDogParks, getDogParkByReference } = require('../services/overpassService');
 const { getCurrentWeatherByCoordinates, validateCoordinates } = require('../services/weatherService');
 const { sendFormatted } = require('../utils/responseFormat');
+const { slugify } = require('../utils/strings');
 
 const router = express.Router();
 
@@ -51,6 +53,28 @@ function readNearbyRadius(query) {
   }
 
   return radius;
+}
+
+function readDiscoveryRadius(query) {
+  const fallback = Number(process.env.OVERPASS_DEFAULT_RADIUS_METERS) || 3000;
+  const maximum = Number(process.env.OVERPASS_MAX_RADIUS_METERS) || 10000;
+  const radius = Number(query.radius || fallback);
+
+  if (!Number.isFinite(radius) || radius <= 0 || radius > maximum) {
+    throw createHttpError(400, `radius must be between 1 and ${maximum} meters`, 'INVALID_DISCOVERY_RADIUS');
+  }
+
+  return radius;
+}
+
+function readDiscoveryLimit(query) {
+  const limit = query.limit === undefined ? 30 : Number(query.limit);
+
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw createHttpError(400, 'limit must be between 1 and 100', 'INVALID_DISCOVERY_LIMIT');
+  }
+
+  return limit;
 }
 
 function validateParkLocationPayload(location) {
@@ -109,6 +133,42 @@ async function updateParkFromRequest(req, park) {
   await park.save();
 
   return park;
+}
+
+function buildImportedPark(candidate, requestBody, userId) {
+  const overrides = pick(requestBody || {}, ['name', 'description', 'address', 'tags', 'amenities', 'rules', 'photos']);
+  const addressOverrides =
+    overrides.address && typeof overrides.address === 'object'
+      ? pick(overrides.address, ['street', 'city', 'postalCode', 'country'])
+      : {};
+  const address = { ...candidate.address, ...addressOverrides };
+
+  if (!address.city || !address.country) {
+    throw createHttpError(
+      400,
+      'address.city and address.country are required when OpenStreetMap does not provide them',
+      'IMPORT_ADDRESS_REQUIRED',
+    );
+  }
+
+  const name = overrides.name || candidate.name;
+  const slugBase = slugify(name) || 'dog-park';
+  const ruleOverrides =
+    overrides.rules && typeof overrides.rules === 'object' && !Array.isArray(overrides.rules) ? overrides.rules : {};
+
+  return {
+    name,
+    slug: `${slugBase}-osm-${candidate.source.elementType}-${candidate.source.elementId}`,
+    description: overrides.description || candidate.description,
+    address,
+    location: candidate.location,
+    tags: [...candidate.tags, ...(Array.isArray(overrides.tags) ? overrides.tags : [])],
+    amenities: [...candidate.amenities, ...(Array.isArray(overrides.amenities) ? overrides.amenities : [])],
+    rules: { ...candidate.rules, ...ruleOverrides },
+    photos: Array.isArray(overrides.photos) ? overrides.photos : [],
+    externalSource: candidate.source,
+    createdBy: userId,
+  };
 }
 
 router.get(
@@ -203,6 +263,46 @@ router.get(
         pages: null,
       },
     });
+  }),
+);
+
+router.get(
+  '/discover',
+  asyncHandler(async (req, res) => {
+    const { latitude, longitude } = validateCoordinates(req.query.lat, req.query.lng);
+    const radius = readDiscoveryRadius(req.query);
+    const limit = readDiscoveryLimit(req.query);
+    const parks = await discoverDogParks(latitude, longitude, radius, limit);
+
+    res.json({
+      data: parks,
+      search: { latitude, longitude, radius, limit },
+      source: 'OpenStreetMap Overpass API',
+      attribution: '© OpenStreetMap contributors',
+      licenseUrl: 'https://www.openstreetmap.org/copyright',
+    });
+  }),
+);
+
+router.post(
+  '/discover/:elementType/:elementId/import',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { elementType, elementId } = req.params;
+    const existingPark = await Park.findOne({
+      'externalSource.provider': 'openstreetmap',
+      'externalSource.elementType': elementType,
+      'externalSource.elementId': elementId,
+    });
+
+    if (existingPark) {
+      throw createHttpError(409, 'OpenStreetMap dog park has already been imported', 'OSM_PARK_ALREADY_IMPORTED');
+    }
+
+    const candidate = await getDogParkByReference(elementType, elementId);
+    const park = await Park.create(buildImportedPark(candidate, req.body, req.user._id));
+
+    res.status(201).json({ park: toCreatedParkResponse(park) });
   }),
 );
 
