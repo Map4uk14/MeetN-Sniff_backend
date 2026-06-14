@@ -56,8 +56,13 @@ function readNearbyRadius(query) {
 }
 
 function readDiscoveryRadius(query) {
-  const fallback = Number(process.env.OVERPASS_DEFAULT_RADIUS_METERS) || 3000;
-  const maximum = Number(process.env.OVERPASS_MAX_RADIUS_METERS) || 10000;
+  const configuredMaximum = Number(process.env.OVERPASS_MAX_RADIUS_METERS);
+  const maximum = Number.isFinite(configuredMaximum) && configuredMaximum >= 1 ? configuredMaximum : 10000;
+  const configuredFallback = Number(process.env.OVERPASS_DEFAULT_RADIUS_METERS);
+  const fallback = Math.min(
+    Number.isFinite(configuredFallback) && configuredFallback >= 1 ? configuredFallback : 3000,
+    maximum,
+  );
   const radius = query.radius === undefined ? fallback : Number(query.radius);
 
   if (!Number.isFinite(radius) || radius < 1 || radius > maximum) {

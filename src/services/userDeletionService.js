@@ -28,7 +28,11 @@ async function deleteUserAndOwnedData(user) {
   }
 
   await user.deleteOne();
-  await Promise.all(affectedParkIds.map((parkId) => Review.recalculateParkRating(parkId)));
+
+  // Recalculate sequentially to avoid a burst of aggregation queries for users with many reviews.
+  for (const parkId of affectedParkIds) {
+    await Review.recalculateParkRating(parkId);
+  }
 
   return {
     deletedParkCount: ownedParkIds.length,
