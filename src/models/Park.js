@@ -58,6 +58,18 @@ const ratingSummarySchema = new mongoose.Schema(
   { _id: false },
 );
 
+const externalSourceSchema = new mongoose.Schema(
+  {
+    provider: { type: String, enum: ['openstreetmap'], required: true },
+    elementType: { type: String, enum: ['node', 'way', 'relation'], required: true },
+    elementId: { type: String, required: true },
+    url: { type: String, required: true },
+    attribution: { type: String, required: true },
+    licenseUrl: { type: String, required: true },
+  },
+  { _id: false },
+);
+
 const parkSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
@@ -70,6 +82,7 @@ const parkSchema = new mongoose.Schema(
     rules: { type: rulesSchema, default: () => ({}) },
     photos: { type: [String], default: [] },
     ratingSummary: { type: ratingSummarySchema, default: () => ({}) },
+    externalSource: { type: externalSourceSchema },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true },
@@ -82,6 +95,10 @@ parkSchema.set('toJSON', {
 
 parkSchema.index({ location: '2dsphere' });
 parkSchema.index({ name: 'text', description: 'text', tags: 'text', amenities: 'text' });
+parkSchema.index(
+  { 'externalSource.provider': 1, 'externalSource.elementType': 1, 'externalSource.elementId': 1 },
+  { unique: true, sparse: true },
+);
 
 parkSchema.pre('validate', function setSlug() {
   if (!this.slug && this.name) {

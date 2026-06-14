@@ -4,6 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createHttpError } = require('../middleware/errorHandler');
 const Park = require('../models/Park');
 const User = require('../models/User');
+const { deleteUserAndOwnedData } = require('../services/userDeletionService');
 const asyncHandler = require('../utils/asyncHandler');
 const { pick } = require('../utils/request');
 
@@ -30,6 +31,15 @@ router.patch(
     await req.user.save();
 
     res.json({ user: req.user.toPrivateJSON() });
+  }),
+);
+
+router.delete(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await deleteUserAndOwnedData(req.user);
+    res.status(204).send();
   }),
 );
 

@@ -32,9 +32,13 @@ JWT_AUDIENCE=meetn-sniff-client
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 OPENWEATHER_API_KEY=
 DEFAULT_NEARBY_RADIUS_METERS=5000
+OVERPASS_API_URL=https://overpass-api.de/api/interpreter
+OVERPASS_DEFAULT_RADIUS_METERS=3000
+OVERPASS_MAX_RADIUS_METERS=10000
 ```
 
 `OPENWEATHER_API_KEY` is optional at startup. The weather endpoint returns `503` until the key is configured.
+OpenStreetMap Overpass does not require an API key. Discovery responses are cached briefly to reduce load on the public service.
 
 Parks store coordinates directly as MongoDB GeoJSON Points in `[longitude, latitude]` order.
 
@@ -111,7 +115,10 @@ MeetN-Sniff_backend/
 - Optional XML for selected park GET endpoints through `?format=xml` or `Accept: application/xml`
 - JWT register/login/logout/session checks
 - Protected user, park, review and admin routes
+- Account deletion with cleanup of owned parks, reviews and favorites
 - MongoDB GeoJSON nearby search
+- OpenStreetMap dog park discovery via `GET /api/parks/discover`
+- Authenticated import of discovered dog parks into MongoDB
 - OpenWeather current weather via `GET /api/parks/:id/weather`
 - Open-Meteo forecast via `GET /api/parks/:id/forecast`
 - Demo seed data for Vienna parks
@@ -128,6 +135,7 @@ MeetN-Sniff_backend/
 ## Notes
 
 - No API keys are committed.
+- Clients displaying OpenStreetMap discovery data must show the included OpenStreetMap attribution.
 - If the database is reached through SSH tunneling, `MONGODB_URI` usually points to `127.0.0.1:<local-tunnel-port>`.
 
 ## License

@@ -35,6 +35,11 @@ LOGIN_RATE_LIMIT=5
 REGISTER_RATE_LIMIT=10
 OPENWEATHER_API_KEY=
 DEFAULT_NEARBY_RADIUS_METERS=5000
+OVERPASS_API_URL=https://overpass-api.de/api/interpreter
+OVERPASS_TIMEOUT_MS=15000
+OVERPASS_CACHE_TTL_MS=300000
+OVERPASS_DEFAULT_RADIUS_METERS=3000
+OVERPASS_MAX_RADIUS_METERS=10000
 ```
 
 `CORS_ORIGINS` is comma-separated. Requests with no `Origin` header are allowed for same-origin requests, cURL, server-to-server calls and mobile clients.
@@ -50,6 +55,8 @@ Security notes:
 - `OPENWEATHER_API_KEY` is optional at server startup. The weather endpoint returns `503` when the key is missing.
 - `DEFAULT_NEARBY_RADIUS_METERS` defaults to `5000` for nearby park searches.
 - Open-Meteo Forecast is used as a second external REST API and does not require an API key.
+- OpenStreetMap Overpass is used for dog park discovery and does not require an API key.
+- Overpass searches default to `3000` meters, are limited to `10000` meters and are cached for `5` minutes by default.
 
 ## Authentication
 
@@ -173,6 +180,14 @@ Notes:
     "averageRating": 4.5,
     "reviewCount": 12
   },
+  "externalSource": {
+    "provider": "openstreetmap",
+    "elementType": "way",
+    "elementId": "442138180",
+    "url": "https://www.openstreetmap.org/way/442138180",
+    "attribution": "© OpenStreetMap contributors",
+    "licenseUrl": "https://www.openstreetmap.org/copyright"
+  },
   "createdBy": "ObjectId",
   "createdAt": "ISODate",
   "updatedAt": "ISODate"
@@ -184,6 +199,7 @@ Notes:
 - `location.coordinates` uses GeoJSON order: `[longitude, latitude]`.
 - `tags` and `amenities` are normalized to lowercase and de-duplicated.
 - `slug` is generated from `name` if it is not provided.
+- `externalSource` is only present when a park was imported from an external service.
 
 ### Review
 
@@ -331,6 +347,20 @@ Request:
 }
 ```
 
+#### DELETE `/users/me`
+
+Requires auth. Permanently deletes the current account.
+
+The deletion also:
+
+- deletes parks created by the user,
+- deletes reviews written by the user,
+- deletes reviews belonging to the user's parks,
+- removes deleted parks from all user favorites,
+- recalculates ratings for surviving parks affected by deleted reviews.
+
+Response `204`.
+
 #### GET `/users/me/favorites`
 
 Requires auth. Returns the current user's favorite parks.
@@ -472,6 +502,138 @@ Common errors:
 
 - `400 INVALID_COORDINATES`
 - `400 INVALID_RADIUS`
+
+#### GET `/parks/discover`
+
+Searches OpenStreetMap Overpass for dog parks near a coordinate. Auth is not required. Results are not stored automatically.
+
+Query parameters:
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `lat` | number | Required latitude |
+| `lng` | number | Required longitude |
+| `radius` | number | Optional radius in meters, default `3000`, maximum `10000` |
+| `limit` | number | Optional result limit, default `30`, maximum `100` |
+
+Example:
+
+```http
+GET /api/parks/discover?lat=48.2082&lng=16.3738&radius=5000&limit=20
+```
+
+Response `200`:
+
+```json
+{
+  "data": [
+    {
+      "source": {
+        "provider": "openstreetmap",
+        "elementType": "way",
+        "elementId": "442138180",
+        "url": "https://www.openstreetmap.org/way/442138180",
+        "attribution": "© OpenStreetMap contributors",
+        "licenseUrl": "https://www.openstreetmap.org/copyright"
+      },
+      "name": "OpenStreetMap dog park 442138180",
+      "address": {},
+      "location": {
+        "type": "Point",
+        "coordinates": [16.38, 48.21]
+      },
+      "tags": ["dog-park", "openstreetmap"],
+      "amenities": [],
+      "rules": {
+        "leashRequired": false,
+        "fenced": true,
+        "dogWasteBags": false
+      },
+      "distanceMeters": 687
+    }
+  ],
+  "search": {
+    "latitude": 48.2082,
+    "longitude": 16.3738,
+    "radius": 5000,
+    "limit": 20
+  },
+  "source": "OpenStreetMap Overpass API",
+  "attribution": "© OpenStreetMap contributors",
+  "licenseUrl": "https://www.openstreetmap.org/copyright"
+}
+```
+
+Clients displaying discovered or imported OpenStreetMap data must keep the OpenStreetMap attribution visible.
+
+Common errors:
+
+- `400 INVALID_COORDINATES`
+- `400 INVALID_DISCOVERY_RADIUS`
+- `400 INVALID_DISCOVERY_LIMIT`
+- `502 OVERPASS_REQUEST_FAILED`
+- `502 OVERPASS_ERROR`
+- `502 OVERPASS_INVALID_RESPONSE`
+- `503 OVERPASS_RATE_LIMITED`
+- `504 OVERPASS_TIMEOUT`
+
+#### POST `/parks/discover/:elementType/:elementId/import`
+
+Requires auth. Imports a selected discovery result into MongoDB. The backend fetches the OpenStreetMap element again instead of trusting coordinates sent by the client.
+
+Supported element types: `node`, `way`, `relation`.
+
+Optional request fields can complete or override the imported data:
+
+```json
+{
+  "name": "Hundezone Innenstadt",
+  "description": "Imported from OpenStreetMap and checked by the user.",
+  "address": {
+    "city": "Wien",
+    "country": "Austria"
+  },
+  "tags": ["central"],
+  "amenities": ["benches"],
+  "rules": {
+    "fenced": true
+  },
+  "photos": []
+}
+```
+
+`address.city` and `address.country` are required when the OpenStreetMap element does not provide them.
+
+Example:
+
+```http
+POST /api/parks/discover/way/442138180/import
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+Response `201`:
+
+```json
+{
+  "park": {
+    "id": "ObjectId",
+    "name": "Hundezone Innenstadt",
+    "slug": "hundezone-innenstadt-osm-way-442138180"
+  }
+}
+```
+
+The stored park includes an `externalSource` reference. A unique MongoDB index prevents importing the same OpenStreetMap element more than once.
+
+Common errors:
+
+- `400 INVALID_OSM_REFERENCE`
+- `400 IMPORT_ADDRESS_REQUIRED`
+- `401 AUTH_REQUIRED`
+- `404 OSM_PARK_NOT_FOUND`
+- `409 OSM_PARK_ALREADY_IMPORTED`
+- Overpass errors listed for the discovery endpoint
 
 #### POST `/parks`
 
@@ -747,7 +909,7 @@ Common errors: `400 INVALID_ROLE`, `401 AUTH_REQUIRED`, `403 ADMIN_REQUIRED`, `4
 
 #### DELETE `/admin/users/:id`
 
-Deletes a user and that user's reviews. Affected park ratings are recalculated. Admins cannot delete their own account through this endpoint.
+Deletes a user with the same dependent-data cleanup as `DELETE /users/me`. Affected ratings are recalculated. Admins cannot delete their own account through this endpoint.
 
 Response `204`.
 
